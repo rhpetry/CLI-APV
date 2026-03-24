@@ -7,11 +7,24 @@ name = "apv"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "language-tags" },
     { name = "rdflib" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "rdflib", specifier = ">=7.6.0" }]
+requires-dist = [
+    { name = "language-tags", specifier = ">=1.2.0" },
+    { name = "rdflib", specifier = ">=7.6.0" },
+]
+
+[[package]]
+name = "language-tags"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/7e/b6a0efe4fee11e9742c1baaedf7c574084238a70b03c1d8eb2761383848f/language_tags-1.2.0.tar.gz", hash = "sha256:e934acba3e3dc85f867703eca421847a9ab7b7679b11b5d5cfd096febbf8bde6", size = 207901, upload-time = "2023-01-11T18:38:07.893Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/42/327554649ed2dd5ce59d3f5da176c7be20f9352c7c6c51597293660b7b08/language_tags-1.2.0-py3-none-any.whl", hash = "sha256:d815604622242fdfbbfd747b40c31213617fd03734a267f2e39ee4bd73c88722", size = 213449, upload-time = "2023-01-11T18:38:05.692Z" },
+]
 
 [[package]]
 name = "pyparsing"

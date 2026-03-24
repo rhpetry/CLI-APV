@@ -6,7 +6,7 @@ import argparse
 import sys
 from typing import Optional
 
-from apv.quality import run_annotation_type_check
+from apv.quality import check_global_min_language_coverage
 from apv.sparql_client import SparqlClient
 
 
@@ -66,16 +66,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     client = _load_client(args)
 
-    # Quality criteria check: distinct annotation properties used.
-    annotations = run_annotation_type_check(client)
+    # Quality criteria check: global minimum language coverage.
+    global_min_language_coverage_violations = check_global_min_language_coverage(client)
 
-    if not annotations:
-        print("No annotation properties found in the ontology.")
-        return 0
 
-    print("Distinct annotation properties found:")
-    for ann in sorted(annotations):
-        print(f"- {ann}")
+    if global_min_language_coverage_violations is not None:
+        print("Global minimum language coverage violations found:")
+        for violation in sorted(global_min_language_coverage_violations):
+            print(f"- {violation}")
+    else:
+        print("No valid global minimum language coverage violations found.")
 
     return 0
 
