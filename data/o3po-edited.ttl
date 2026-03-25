@@ -31,8 +31,8 @@
                                                            "Haroldo Rojas"@en ,
                                                            "Mara Abel"@en ;
                                             dc:creator "Nicolau Santos"@en ;
-                                            apv:GlobalMinLanguageCoverage "en pt-br"@en ;
-                                            apv:ClassMinAnnotationCoverage "1^aedaed 0^aedadae daedaed 3^rdf:label rdfs:labelele";
+                                            apv:GlobalMinLanguageCoverage "pt-br en" ;
+                                            apv:InstanceMinAnnotationCoverage "rdfs:label";
                                             apv:InstanceURIFormationRule "https://www.inf.ufrgs.br/ontologies/o3po#[a-zA-Z]+" ;
                                             dc:description "A domain ontology for offshore petroleum production plants has been established utilizing BFO as the top-level ontology and incorporating IOF-Core and GeoCore as middle-level ontologies."@en ,
                                                            "Uma ontologia de domínio para plantas de produção de petróleo offshore foi estabelecida utilizando BFO como a ontologia de topo e incorporando IOF-Core e GeoCore como ontologias de nível intermediário."@pt-br ;
@@ -58,6 +58,8 @@ THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMP
 ### MY ANNOTATION Properties
 
 o3po:thingname rdf:type owl:AnnotationProperty ;
+  rdfs:label "nomecoisa"@pt-br,
+    "thingname"@en ;
   apv:MinAnnotationLength 20 ;
   apv:MaxAnnotationLength 20 ;
   apv:AnnotationRegularExpression "^2$" .
@@ -65,7 +67,8 @@ o3po:thingname rdf:type owl:AnnotationProperty ;
 o3po:a o3po:thingname "daedaedead" .
 
 o3po:v1234 rdf:type o3po:Valve ;
-  rdfs:label "valve at position 1234 of platform p33" .
+  rdfs:label "valve at position 1234 of platform p33"@en,
+    "valvula na posição 1234"@pt-br .
 
 o3po:valveFromFieldN rdf:type o3po:Valve ;
   rdfs:label "valve at some position of platform N" .

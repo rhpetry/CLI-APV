@@ -29,7 +29,7 @@ def retrieve_language_tags(client: SparqlClient) -> List[str]:
         }
     """
     results = list(client.query(query))
-    gmlc_value = str(results[0][0]).strip()
+    gmlc_value = str(results[0][0]).strip() if results else ""
     
     unvalidated_language_tags = gmlc_value.split()
     for tag in unvalidated_language_tags:

@@ -7,7 +7,7 @@ import sys
 from typing import Optional, List
 
 from apv.quality_criteria import retrieve_language_tags, retrieve_class_annotation_coverage, retrieve_class_uri_formation_rule, retrieve_relation_uri_formation_rule, retrieve_instance_uri_formation_rule, retrieve_relation_annotation_coverage, retrieve_instance_annotation_coverage, retrieve_min_annotation_length, retrieve_max_annotation_length, retrieve_annotation_regular_expression, retrieve_instance_of_annotation_coverage
-from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule
+from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage
 from apv.sparql_client import SparqlClient
 
 
@@ -220,8 +220,32 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # - GlobalMinLanguageCoverage
     # - ClassMinAnnotationCoverage
+    class_annotation_violations = check_class_min_annotation_coverage(client, language_tags, class_annotation_cardinalities)
+    if class_annotation_violations:
+        print("Class annotation coverage violations found:")
+        for class_uri, violation_msg in class_annotation_violations:
+            print("- ", class_uri, ":", violation_msg)
+    else:
+        print("No ClassMinAnnotationCoverage violations found.")
+
     # - RelationMinAnnotationCoverage
+    relation_annotation_violations = check_relation_min_annotation_coverage(client, language_tags, relation_annotation_cardinalities)
+    if relation_annotation_violations:
+        print("Relation annotation coverage violations found:")
+        for relation_uri, violation_msg in relation_annotation_violations:
+            print("- ", relation_uri, ":", violation_msg)
+    else:
+        print("No RelationMinAnnotationCoverage violations found.")
+
     # - InstanceMinAnnotationCoverage
+    instance_annotation_violations = check_instance_min_annotation_coverage(client, language_tags, instance_annotation_cardinalities)
+    if instance_annotation_violations:
+        print("Instance annotation coverage violations found:")
+        for instance_uri, violation_msg in instance_annotation_violations:
+            print("- ", instance_uri, ":", violation_msg)
+    else:
+        print("No InstanceMinAnnotationCoverage violations found.")
+
     # - MinAnnotationLength
     # - MaxAnnotationLength
     # - AnnotationRegularExpression
