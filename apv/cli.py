@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Optional
+from typing import Optional, List
 
-from apv.quality import check_global_min_language_coverage
+from apv.quality_criteria import retrieve_language_tags, retrieve_class_annotation_coverage, retrieve_class_uri_formation_rule, retrieve_relation_uri_formation_rule, retrieve_instance_uri_formation_rule, retrieve_relation_annotation_coverage, retrieve_instance_annotation_coverage, retrieve_min_annotation_length, retrieve_max_annotation_length, retrieve_annotation_regular_expression, retrieve_instance_of_annotation_coverage
+from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule
 from apv.sparql_client import SparqlClient
 
 
@@ -66,17 +67,165 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     client = _load_client(args)
 
-    # Quality criteria check: global minimum language coverage.
-    global_min_language_coverage_violations = check_global_min_language_coverage(client)
+    # Retrieve annotation quality parameters from the ontology
+    # - ClassURIFormationRule
+    class_uri_formation_rule = retrieve_class_uri_formation_rule(client)
+    if class_uri_formation_rule:
+        print("apv:ClassURIFormationRule requires the following URI pattern for Classes:")
+        print("- ", class_uri_formation_rule)
 
-
-    if global_min_language_coverage_violations is not None:
-        print("Global minimum language coverage violations found:")
-        for violation in sorted(global_min_language_coverage_violations):
-            print(f"- {violation}")
+        class_uri_violations = check_class_uri_formation_rule(client, class_uri_formation_rule)
+        if class_uri_violations:
+            print("Class URI formation violations found:")
+            for v in class_uri_violations:
+                print("- ", v)
+        else:
+            print("No ClassURIFormationRule violations found.")
     else:
-        print("No valid global minimum language coverage violations found.")
+        print("No ClassURIFormationRule statement found in ontology. Skipping class URI formation rule checks.")
 
+    # - RelationURIFormationRule
+    relation_uri_formation_rule = retrieve_relation_uri_formation_rule(client)
+    if relation_uri_formation_rule:
+        print("apv:RelationURIFormationRule requires the following URI pattern for Relations:")
+        print("- ", relation_uri_formation_rule)
+
+        relation_uri_violations = check_relation_uri_formation_rule(client, relation_uri_formation_rule)
+        if relation_uri_violations:
+            print("Relation URI formation violations found:")
+            for v in relation_uri_violations:
+                print("- ", v)
+        else:
+            print("No RelationURIFormationRule violations found.")
+    else:
+        print("No RelationURIFormationRule statement found in ontology. Skipping relation URI formation rule checks.")
+
+    # - InstanceURIFormationRule
+    instance_uri_formation_rule = retrieve_instance_uri_formation_rule(client)
+    if instance_uri_formation_rule:
+        print("apv:InstanceURIFormationRule requires the following URI pattern for Instances:")
+        print("- ", instance_uri_formation_rule)
+
+        instance_uri_violations = check_instance_uri_formation_rule(client, instance_uri_formation_rule)
+        if instance_uri_violations:
+            print("Instance URI formation violations found:")
+            for v in instance_uri_violations:
+                print("- ", v)
+        else:
+            print("No InstanceURIFormationRule violations found.")
+    else:
+        print("No InstanceURIFormationRule statement found in ontology. Skipping instance URI formation rule checks.")
+
+    # - GlobalMinLanguageCoverage
+    language_tags = retrieve_language_tags(client)
+    if language_tags:
+        print("apv:GlobalMinLanguageCoverage requires the following language tags:")
+        for language_tag in language_tags:
+            print("- ", language_tag)
+    else:
+        print("No GlobalMinLanguageCoverage statement found in ontology. Skipping language coverage checks.")
+
+    # - ClassMinAnnotationCoverage
+    class_annotation_cardinalities = retrieve_class_annotation_coverage(client)
+    if class_annotation_cardinalities:
+        print("apv:ClassMinAnnotationCoverage requires the following annotations:")
+        for a, c in class_annotation_cardinalities:
+            print("- ", c, a)
+    else:
+        print("No ClassMinAnnotationCoverage statement found in ontology. Skipping class annotation coverage checks.")
+
+    # - RelationMinAnnotationCoverage
+    relation_annotation_cardinalities = retrieve_relation_annotation_coverage(client)
+    if relation_annotation_cardinalities:
+        print("apv:RelationMinAnnotationCoverage requires the following annotations:")
+        for a, c in relation_annotation_cardinalities:
+            print("- ", c, a)
+    else:
+        print("No RelationMinAnnotationCoverage statement found in ontology. Skipping relation annotation coverage checks.")
+
+    # - InstanceMinAnnotationCoverage
+    instance_annotation_cardinalities = retrieve_instance_annotation_coverage(client)
+    if instance_annotation_cardinalities:
+        print("apv:InstanceMinAnnotationCoverage requires the following annotations:")
+        for a, c in instance_annotation_cardinalities:
+            print("- ", c, a)
+    else:
+        print("No InstanceMinAnnotationCoverage statement found in ontology. Skipping instance annotation coverage checks.")
+
+    # - MinAnnotationLength
+    min_annotation_lengths = retrieve_min_annotation_length(client)
+    if min_annotation_lengths:
+        print("apv:MinAnnotationLength constraints:")
+        for annotation_property, min_length in min_annotation_lengths:
+            print("- ", annotation_property, ": minimum", min_length, "characters")
+    else:
+        print("No MinAnnotationLength constraints found in ontology. Skipping minimum annotation length checks.")
+
+    # - MaxAnnotationLength
+    max_annotation_lengths = retrieve_max_annotation_length(client)
+    if max_annotation_lengths:
+        print("apv:MaxAnnotationLength constraints:")
+        for annotation_property, max_length in max_annotation_lengths:
+            print("- ", annotation_property, ": maximum", max_length, "characters")
+    else:
+        print("No MaxAnnotationLength constraints found in ontology. Skipping maximum annotation length checks.")
+
+    # - AnnotationRegularExpression
+    annotation_regex_expressions = retrieve_annotation_regular_expression(client)
+    if annotation_regex_expressions:
+        print("apv:AnnotationRegularExpression constraints:")
+        for annotation_property, regex_pattern in annotation_regex_expressions:
+            print("- ", annotation_property, ": regex", regex_pattern)
+    else:
+        print("No AnnotationRegularExpression constraints found in ontology. Skipping annotation regular expression checks.")
+
+    # - InstanceOfMinAnnotationCoverage
+    instance_coverage_requirements = retrieve_instance_of_annotation_coverage(client)
+    if instance_coverage_requirements:
+        print("apv:InstanceOfMinAnnotationCoverage constraints:")
+        for class_uri, annotations in instance_coverage_requirements:
+            print("- ", class_uri, ": instances require")
+            for annotation_iri, cardinality in annotations:
+                print("   - ", cardinality, annotation_iri)
+    else:
+        print("No InstanceOfMinAnnotationCoverage constraints found in ontology. Skipping instance annotation coverage checks.")
+
+    # Perform quality checks:
+    # - ClassURIFormationRule
+    class_uri_formation_rule_violations = check_class_uri_formation_rule(client, class_uri_formation_rule)
+    if class_uri_formation_rule_violations:
+        print("Class URI formation violations found:")
+        for v in class_uri_formation_rule_violations:
+            print("- ", v)
+    else:
+        print("No ClassURIFormationRule violations found.")
+
+    # - RelationURIFormationRule
+    relation_uri_formation_rule_violations = check_relation_uri_formation_rule(client, relation_uri_formation_rule)
+    if relation_uri_formation_rule_violations:
+        print("Relation URI formation violations found:")
+        for v in relation_uri_formation_rule_violations:
+            print("- ", v)
+    else:
+        print("No RelationURIFormationRule violations found.")
+
+    # - InstanceURIFormationRule
+    instance_uri_formation_rule_violations = check_instance_uri_formation_rule(client, instance_uri_formation_rule)
+    if instance_uri_formation_rule_violations:
+        print("Instance URI formation violations found:")
+        for v in instance_uri_formation_rule_violations:
+            print("- ", v)
+    else:
+        print("No InstanceURIFormationRule violations found.")
+
+    # - GlobalMinLanguageCoverage
+    # - ClassMinAnnotationCoverage
+    # - RelationMinAnnotationCoverage
+    # - InstanceMinAnnotationCoverage
+    # - MinAnnotationLength
+    # - MaxAnnotationLength
+    # - AnnotationRegularExpression
+    # - InstanceOfMinAnnotationCoverage
     return 0
 
 
