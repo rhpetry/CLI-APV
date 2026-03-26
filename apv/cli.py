@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from apv.quality_criteria import retrieve_language_tags, retrieve_class_annotation_coverage, retrieve_class_uri_formation_rule, retrieve_relation_uri_formation_rule, retrieve_instance_uri_formation_rule, retrieve_relation_annotation_coverage, retrieve_instance_annotation_coverage, retrieve_min_annotation_length, retrieve_max_annotation_length, retrieve_annotation_regular_expression, retrieve_instance_of_annotation_coverage
 from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage, check_min_annotation_length, check_max_annotation_length, check_annotation_regular_expression, check_instance_of_min_annotation_coverage
@@ -49,6 +50,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="RDF serialization format when loading a local file (default: ttl).",
     )
 
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
+        "--text",
+        dest="output_mode",
+        action="store_const",
+        const="text",
+        default="text",
+        help="Print human-readable validation output (default).",
+    )
+    output.add_argument(
+        "--json",
+        dest="output_mode",
+        action="store_const",
+        const="json",
+        help="Print validation output as JSON.",
+    )
+
     return parser
 
 
@@ -61,63 +79,37 @@ def _load_client(args: argparse.Namespace) -> SparqlClient:
     )
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    client = _load_client(args)
-
-    # Retrieve annotation quality parameters from the ontology
-    # - ClassURIFormationRule
-    class_uri_formation_rule = retrieve_class_uri_formation_rule(client)
+def _print_text_constraints(
+    class_uri_formation_rule: Optional[str],
+    relation_uri_formation_rule: Optional[str],
+    instance_uri_formation_rule: Optional[str],
+    language_tags: List[str],
+    class_annotation_cardinalities: List[tuple[str, int]],
+    relation_annotation_cardinalities: List[tuple[str, int]],
+    instance_annotation_cardinalities: List[tuple[str, int]],
+    min_annotation_lengths: List[tuple[str, int]],
+    max_annotation_lengths: List[tuple[str, int]],
+    annotation_regex_expressions: List[tuple[str, str]],
+    instance_coverage_requirements: List[tuple[str, List[tuple[str, int]]]],
+) -> None:
     if class_uri_formation_rule:
         print("apv:ClassURIFormationRule requires the following URI pattern for Classes:")
         print("- ", class_uri_formation_rule)
-
-        class_uri_violations = check_class_uri_formation_rule(client, class_uri_formation_rule)
-        if class_uri_violations:
-            print("Class URI formation violations found:")
-            for v in class_uri_violations:
-                print("- ", v)
-        else:
-            print("No ClassURIFormationRule violations found.")
     else:
         print("No ClassURIFormationRule statement found in ontology. Skipping class URI formation rule checks.")
 
-    # - RelationURIFormationRule
-    relation_uri_formation_rule = retrieve_relation_uri_formation_rule(client)
     if relation_uri_formation_rule:
         print("apv:RelationURIFormationRule requires the following URI pattern for Relations:")
         print("- ", relation_uri_formation_rule)
-
-        relation_uri_violations = check_relation_uri_formation_rule(client, relation_uri_formation_rule)
-        if relation_uri_violations:
-            print("Relation URI formation violations found:")
-            for v in relation_uri_violations:
-                print("- ", v)
-        else:
-            print("No RelationURIFormationRule violations found.")
     else:
         print("No RelationURIFormationRule statement found in ontology. Skipping relation URI formation rule checks.")
 
-    # - InstanceURIFormationRule
-    instance_uri_formation_rule = retrieve_instance_uri_formation_rule(client)
     if instance_uri_formation_rule:
         print("apv:InstanceURIFormationRule requires the following URI pattern for Instances:")
         print("- ", instance_uri_formation_rule)
-
-        instance_uri_violations = check_instance_uri_formation_rule(client, instance_uri_formation_rule)
-        if instance_uri_violations:
-            print("Instance URI formation violations found:")
-            for v in instance_uri_violations:
-                print("- ", v)
-        else:
-            print("No InstanceURIFormationRule violations found.")
     else:
         print("No InstanceURIFormationRule statement found in ontology. Skipping instance URI formation rule checks.")
 
-    # - GlobalMinLanguageCoverage
-    language_tags = retrieve_language_tags(client)
     if language_tags:
         print("apv:GlobalMinLanguageCoverage requires the following language tags:")
         for language_tag in language_tags:
@@ -125,35 +117,27 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         print("No GlobalMinLanguageCoverage statement found in ontology. Skipping language coverage checks.")
 
-    # - ClassMinAnnotationCoverage
-    class_annotation_cardinalities = retrieve_class_annotation_coverage(client)
     if class_annotation_cardinalities:
         print("apv:ClassMinAnnotationCoverage requires the following annotations:")
-        for a, c in class_annotation_cardinalities:
-            print("- ", c, a)
+        for annotation_iri, cardinality in class_annotation_cardinalities:
+            print("- ", cardinality, annotation_iri)
     else:
         print("No ClassMinAnnotationCoverage statement found in ontology. Skipping class annotation coverage checks.")
 
-    # - RelationMinAnnotationCoverage
-    relation_annotation_cardinalities = retrieve_relation_annotation_coverage(client)
     if relation_annotation_cardinalities:
         print("apv:RelationMinAnnotationCoverage requires the following annotations:")
-        for a, c in relation_annotation_cardinalities:
-            print("- ", c, a)
+        for annotation_iri, cardinality in relation_annotation_cardinalities:
+            print("- ", cardinality, annotation_iri)
     else:
         print("No RelationMinAnnotationCoverage statement found in ontology. Skipping relation annotation coverage checks.")
 
-    # - InstanceMinAnnotationCoverage
-    instance_annotation_cardinalities = retrieve_instance_annotation_coverage(client)
     if instance_annotation_cardinalities:
         print("apv:InstanceMinAnnotationCoverage requires the following annotations:")
-        for a, c in instance_annotation_cardinalities:
-            print("- ", c, a)
+        for annotation_iri, cardinality in instance_annotation_cardinalities:
+            print("- ", cardinality, annotation_iri)
     else:
         print("No InstanceMinAnnotationCoverage statement found in ontology. Skipping instance annotation coverage checks.")
 
-    # - MinAnnotationLength
-    min_annotation_lengths = retrieve_min_annotation_length(client)
     if min_annotation_lengths:
         print("apv:MinAnnotationLength constraints:")
         for annotation_property, min_length in min_annotation_lengths:
@@ -161,8 +145,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         print("No MinAnnotationLength constraints found in ontology. Skipping minimum annotation length checks.")
 
-    # - MaxAnnotationLength
-    max_annotation_lengths = retrieve_max_annotation_length(client)
     if max_annotation_lengths:
         print("apv:MaxAnnotationLength constraints:")
         for annotation_property, max_length in max_annotation_lengths:
@@ -170,8 +152,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         print("No MaxAnnotationLength constraints found in ontology. Skipping maximum annotation length checks.")
 
-    # - AnnotationRegularExpression
-    annotation_regex_expressions = retrieve_annotation_regular_expression(client)
     if annotation_regex_expressions:
         print("apv:AnnotationRegularExpression constraints:")
         for annotation_property, regex_pattern in annotation_regex_expressions:
@@ -179,8 +159,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         print("No AnnotationRegularExpression constraints found in ontology. Skipping annotation regular expression checks.")
 
-    # - InstanceOfMinAnnotationCoverage
-    instance_coverage_requirements = retrieve_instance_of_annotation_coverage(client)
     if instance_coverage_requirements:
         print("apv:InstanceOfMinAnnotationCoverage constraints:")
         for class_uri, annotations in instance_coverage_requirements:
@@ -190,99 +168,217 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         print("No InstanceOfMinAnnotationCoverage constraints found in ontology. Skipping instance annotation coverage checks.")
 
-    # Perform quality checks:
-    # - ClassURIFormationRule
-    class_uri_formation_rule_violations = check_class_uri_formation_rule(client, class_uri_formation_rule)
-    if class_uri_formation_rule_violations:
-        print("Class URI formation violations found:")
-        for v in class_uri_formation_rule_violations:
-            print("- ", v)
-    else:
-        print("No ClassURIFormationRule violations found.")
 
-    # - RelationURIFormationRule
-    relation_uri_formation_rule_violations = check_relation_uri_formation_rule(client, relation_uri_formation_rule)
-    if relation_uri_formation_rule_violations:
-        print("Relation URI formation violations found:")
-        for v in relation_uri_formation_rule_violations:
-            print("- ", v)
-    else:
-        print("No RelationURIFormationRule violations found.")
+def _print_text_results(results: List[dict[str, Any]]) -> None:
+    message_by_check = {
+        "ClassURIFormationRule": ("Class URI formation violations found:", "No ClassURIFormationRule violations found."),
+        "RelationURIFormationRule": ("Relation URI formation violations found:", "No RelationURIFormationRule violations found."),
+        "InstanceURIFormationRule": ("Instance URI formation violations found:", "No InstanceURIFormationRule violations found."),
+        "GlobalMinLanguageCoverage": ("Global language coverage violations found:", "No GlobalMinLanguageCoverage violations found."),
+        "ClassMinAnnotationCoverage": ("Class annotation coverage violations found:", "No ClassMinAnnotationCoverage violations found."),
+        "RelationMinAnnotationCoverage": ("Relation annotation coverage violations found:", "No RelationMinAnnotationCoverage violations found."),
+        "InstanceMinAnnotationCoverage": ("Instance annotation coverage violations found:", "No InstanceMinAnnotationCoverage violations found."),
+        "MinAnnotationLength": ("Minimum annotation length violations found:", "No MinAnnotationLength violations found."),
+        "MaxAnnotationLength": ("Maximum annotation length violations found:", "No MaxAnnotationLength violations found."),
+        "AnnotationRegularExpression": ("Annotation regular expression violations found:", "No AnnotationRegularExpression violations found."),
+        "InstanceOfMinAnnotationCoverage": ("Instance-of annotation coverage violations found:", "No InstanceOfMinAnnotationCoverage violations found."),
+    }
 
-    # - InstanceURIFormationRule
-    instance_uri_formation_rule_violations = check_instance_uri_formation_rule(client, instance_uri_formation_rule)
-    if instance_uri_formation_rule_violations:
-        print("Instance URI formation violations found:")
-        for v in instance_uri_formation_rule_violations:
-            print("- ", v)
-    else:
-        print("No InstanceURIFormationRule violations found.")
+    for result in results:
+        check = result["check"]
+        violations = result["violations"]
+        found_message, empty_message = message_by_check[check]
 
-    # - GlobalMinLanguageCoverage
-    # - ClassMinAnnotationCoverage
-    class_annotation_violations = check_class_min_annotation_coverage(client, language_tags, class_annotation_cardinalities)
-    if class_annotation_violations:
-        print("Class annotation coverage violations found:")
-        for class_uri, violation_msg in class_annotation_violations:
-            print("- ", class_uri, ":", violation_msg)
-    else:
-        print("No ClassMinAnnotationCoverage violations found.")
+        if violations:
+            print(found_message)
+            for violation in violations:
+                if isinstance(violation, (list, tuple)) and len(violation) == 2:
+                    print("- ", violation[0], ":", violation[1])
+                else:
+                    print("- ", violation)
+        else:
+            print(empty_message)
 
-    # - RelationMinAnnotationCoverage
-    relation_annotation_violations = check_relation_min_annotation_coverage(client, language_tags, relation_annotation_cardinalities)
-    if relation_annotation_violations:
-        print("Relation annotation coverage violations found:")
-        for relation_uri, violation_msg in relation_annotation_violations:
-            print("- ", relation_uri, ":", violation_msg)
-    else:
-        print("No RelationMinAnnotationCoverage violations found.")
 
-    # - InstanceMinAnnotationCoverage
-    instance_annotation_violations = check_instance_min_annotation_coverage(client, language_tags, instance_annotation_cardinalities)
-    if instance_annotation_violations:
-        print("Instance annotation coverage violations found:")
-        for instance_uri, violation_msg in instance_annotation_violations:
-            print("- ", instance_uri, ":", violation_msg)
-    else:
-        print("No InstanceMinAnnotationCoverage violations found.")
+def _build_results(
+    client: SparqlClient,
+    class_uri_formation_rule: Optional[str],
+    relation_uri_formation_rule: Optional[str],
+    instance_uri_formation_rule: Optional[str],
+    language_tags: List[str],
+    class_annotation_cardinalities: List[tuple[str, int]],
+    relation_annotation_cardinalities: List[tuple[str, int]],
+    instance_annotation_cardinalities: List[tuple[str, int]],
+    min_annotation_lengths: List[tuple[str, int]],
+    max_annotation_lengths: List[tuple[str, int]],
+    annotation_regex_expressions: List[tuple[str, str]],
+    instance_coverage_requirements: List[tuple[str, List[tuple[str, int]]]],
+) -> List[dict[str, Any]]:
+    return [
+        {
+            "check": "ClassURIFormationRule",
+            "parameter": class_uri_formation_rule,
+            "violations": check_class_uri_formation_rule(client, class_uri_formation_rule),
+        },
+        {
+            "check": "RelationURIFormationRule",
+            "parameter": relation_uri_formation_rule,
+            "violations": check_relation_uri_formation_rule(client, relation_uri_formation_rule),
+        },
+        {
+            "check": "InstanceURIFormationRule",
+            "parameter": instance_uri_formation_rule,
+            "violations": check_instance_uri_formation_rule(client, instance_uri_formation_rule),
+        },
+        {
+            "check": "GlobalMinLanguageCoverage",
+            "parameter": language_tags,
+            "violations": [],
+        },
+        {
+            "check": "ClassMinAnnotationCoverage",
+            "parameter": class_annotation_cardinalities,
+            "violations": check_class_min_annotation_coverage(
+                client, language_tags, class_annotation_cardinalities
+            ),
+        },
+        {
+            "check": "RelationMinAnnotationCoverage",
+            "parameter": relation_annotation_cardinalities,
+            "violations": check_relation_min_annotation_coverage(
+                client, language_tags, relation_annotation_cardinalities
+            ),
+        },
+        {
+            "check": "InstanceMinAnnotationCoverage",
+            "parameter": instance_annotation_cardinalities,
+            "violations": check_instance_min_annotation_coverage(
+                client, language_tags, instance_annotation_cardinalities
+            ),
+        },
+        {
+            "check": "MinAnnotationLength",
+            "parameter": min_annotation_lengths,
+            "violations": check_min_annotation_length(client, min_annotation_lengths),
+        },
+        {
+            "check": "MaxAnnotationLength",
+            "parameter": max_annotation_lengths,
+            "violations": check_max_annotation_length(client, max_annotation_lengths),
+        },
+        {
+            "check": "AnnotationRegularExpression",
+            "parameter": annotation_regex_expressions,
+            "violations": check_annotation_regular_expression(
+                client, annotation_regex_expressions
+            ),
+        },
+        {
+            "check": "InstanceOfMinAnnotationCoverage",
+            "parameter": instance_coverage_requirements,
+            "violations": check_instance_of_min_annotation_coverage(
+                client, language_tags, instance_coverage_requirements
+            ),
+        },
+    ]
 
-    # - MinAnnotationLength
-    min_annotation_length_violations = check_min_annotation_length(client, min_annotation_lengths)
-    if min_annotation_length_violations:
-        print("Minimum annotation length violations found:")
-        for subject_uri, violation_msg in min_annotation_length_violations:
-            print("- ", subject_uri, ":", violation_msg)
-    else:
-        print("No MinAnnotationLength violations found.")
 
-    # - MaxAnnotationLength
-    max_annotation_length_violations = check_max_annotation_length(client, max_annotation_lengths)
-    if max_annotation_length_violations:
-        print("Maximum annotation length violations found:")
-        for subject_uri, violation_msg in max_annotation_length_violations:
-            print("- ", subject_uri, ":", violation_msg)
-    else:
-        print("No MaxAnnotationLength violations found.")
+def _build_constraints(
+    class_uri_formation_rule: Optional[str],
+    relation_uri_formation_rule: Optional[str],
+    instance_uri_formation_rule: Optional[str],
+    language_tags: List[str],
+    class_annotation_cardinalities: List[tuple[str, int]],
+    relation_annotation_cardinalities: List[tuple[str, int]],
+    instance_annotation_cardinalities: List[tuple[str, int]],
+    min_annotation_lengths: List[tuple[str, int]],
+    max_annotation_lengths: List[tuple[str, int]],
+    annotation_regex_expressions: List[tuple[str, str]],
+    instance_coverage_requirements: List[tuple[str, List[tuple[str, int]]]],
+) -> dict[str, Any]:
+    return {
+        "class_uri_formation_rule": class_uri_formation_rule,
+        "relation_uri_formation_rule": relation_uri_formation_rule,
+        "instance_uri_formation_rule": instance_uri_formation_rule,
+        "language_coverage": language_tags,
+        "class_min_annotation_coverage": class_annotation_cardinalities,
+        "relation_min_annotation_coverage": relation_annotation_cardinalities,
+        "instance_min_annotation_coverage": instance_annotation_cardinalities,
+        "min_annotation_length": min_annotation_lengths,
+        "max_annotation_length": max_annotation_lengths,
+        "annotation_regular_expression": annotation_regex_expressions,
+        "instance_of_min_annotation_coverage": instance_coverage_requirements,
+    }
 
-    # - AnnotationRegularExpression
-    annotation_regex_violations = check_annotation_regular_expression(client, annotation_regex_expressions)
-    if annotation_regex_violations:
-        print("Annotation regular expression violations found:")
-        for subject_uri, violation_msg in annotation_regex_violations:
-            print("- ", subject_uri, ":", violation_msg)
-    else:
-        print("No AnnotationRegularExpression violations found.")
 
-    # - InstanceOfMinAnnotationCoverage
-    instance_of_annotation_violations = check_instance_of_min_annotation_coverage(
-        client, language_tags, instance_coverage_requirements
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    client = _load_client(args)
+
+    # Retrieve annotation quality parameters from the ontology
+    class_uri_formation_rule = retrieve_class_uri_formation_rule(client)
+    relation_uri_formation_rule = retrieve_relation_uri_formation_rule(client)
+    instance_uri_formation_rule = retrieve_instance_uri_formation_rule(client)
+    language_tags = retrieve_language_tags(client)
+    class_annotation_cardinalities = retrieve_class_annotation_coverage(client)
+    relation_annotation_cardinalities = retrieve_relation_annotation_coverage(client)
+    instance_annotation_cardinalities = retrieve_instance_annotation_coverage(client)
+    min_annotation_lengths = retrieve_min_annotation_length(client)
+    max_annotation_lengths = retrieve_max_annotation_length(client)
+    annotation_regex_expressions = retrieve_annotation_regular_expression(client)
+    instance_coverage_requirements = retrieve_instance_of_annotation_coverage(client)
+    if args.output_mode == "text":
+        _print_text_constraints(
+            class_uri_formation_rule,
+            relation_uri_formation_rule,
+            instance_uri_formation_rule,
+            language_tags,
+            class_annotation_cardinalities,
+            relation_annotation_cardinalities,
+            instance_annotation_cardinalities,
+            min_annotation_lengths,
+            max_annotation_lengths,
+            annotation_regex_expressions,
+            instance_coverage_requirements,
+        )
+
+    results = _build_results(
+        client,
+        class_uri_formation_rule,
+        relation_uri_formation_rule,
+        instance_uri_formation_rule,
+        language_tags,
+        class_annotation_cardinalities,
+        relation_annotation_cardinalities,
+        instance_annotation_cardinalities,
+        min_annotation_lengths,
+        max_annotation_lengths,
+        annotation_regex_expressions,
+        instance_coverage_requirements,
     )
-    if instance_of_annotation_violations:
-        print("Instance-of annotation coverage violations found:")
-        for instance_uri, violation_msg in instance_of_annotation_violations:
-            print("- ", instance_uri, ":", violation_msg)
+
+    if args.output_mode == "json":
+        report = {
+            "constraints": _build_constraints(
+                class_uri_formation_rule,
+                relation_uri_formation_rule,
+                instance_uri_formation_rule,
+                language_tags,
+                class_annotation_cardinalities,
+                relation_annotation_cardinalities,
+                instance_annotation_cardinalities,
+                min_annotation_lengths,
+                max_annotation_lengths,
+                annotation_regex_expressions,
+                instance_coverage_requirements,
+            ),
+            "violations": results,
+        }
+        print(json.dumps(report, indent=2))
     else:
-        print("No InstanceOfMinAnnotationCoverage violations found.")
+        _print_text_results(results)
 
     return 0
 
