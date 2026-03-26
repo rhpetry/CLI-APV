@@ -61,10 +61,10 @@ o3po:thingname rdf:type owl:AnnotationProperty ;
   rdfs:label "nomecoisa"@pt-br,
     "thingname"@en ;
   apv:MinAnnotationLength 20 ;
-  apv:MaxAnnotationLength 20 ;
-  apv:AnnotationRegularExpression "^2$" .
+  apv:MaxAnnotationLength 30 ;
+  apv:AnnotationRegularExpression "^(a|b)+$" .
 
-o3po:a o3po:thingname "daedaedead" .
+o3po:a o3po:thingname "ababababababababababababdabbb" .
 
 o3po:v1234 rdf:type o3po:Valve ;
   rdfs:label "valve at position 1234 of platform p33"@en,
@@ -72,6 +72,15 @@ o3po:v1234 rdf:type o3po:Valve ;
 
 o3po:valveFromFieldN rdf:type o3po:Valve ;
   rdfs:label "valve at some position of platform N" .
+
+o3po:myclass rdf:type owl:Class ;
+  apv:InstanceOfMinAnnotationCoverage "o3po:thingname" .
+
+o3po:i01 rdf:type o3po:myclass ;
+  rdfs:label "instancia de alguma coisa"@pt-br .
+
+o3po:i02 rdf:type o3po:myclass2 ;
+  rdfs:label "instancia de alguma coisa"@pt-br .
 
 #################################################################
 #    Object Properties

@@ -282,3 +282,175 @@ def check_instance_min_annotation_coverage(client: SparqlClient, language_tags: 
 
     return violations
 
+
+def check_min_annotation_length(
+    client: SparqlClient,
+    min_annotation_lengths: List[Tuple[str, int]],
+) -> List[Tuple[str, str]]:
+    """Return annotation length violations for values shorter than the configured minimum."""
+    if not min_annotation_lengths:
+        return []
+
+    violations: List[Tuple[str, str]] = []
+
+    for annotation_property, min_length in min_annotation_lengths:
+        normalized_prop = normalize_iri(annotation_property)
+        query = f"""
+            SELECT ?subject ?value WHERE {{
+                ?subject {normalized_prop} ?value .
+            }}
+        """
+
+        for row in client.query(query):
+            subject_uri = str(row[0])
+            annotation_value = str(row[1])
+            annotation_length = len(annotation_value)
+
+            if annotation_length < min_length:
+                violation_msg = (
+                    f"Annotation {annotation_property} value '{annotation_value}' "
+                    f"has {annotation_length} characters, requires at least {min_length}"
+                )
+                violations.append((subject_uri, violation_msg))
+
+    return violations
+
+
+def check_max_annotation_length(
+    client: SparqlClient,
+    max_annotation_lengths: List[Tuple[str, int]],
+) -> List[Tuple[str, str]]:
+    """Return annotation length violations for values longer than the configured maximum."""
+    if not max_annotation_lengths:
+        return []
+
+    violations: List[Tuple[str, str]] = []
+
+    for annotation_property, max_length in max_annotation_lengths:
+        normalized_prop = normalize_iri(annotation_property)
+        query = f"""
+            SELECT ?subject ?value WHERE {{
+                ?subject {normalized_prop} ?value .
+            }}
+        """
+
+        for row in client.query(query):
+            subject_uri = str(row[0])
+            annotation_value = str(row[1])
+            annotation_length = len(annotation_value)
+
+            if annotation_length > max_length:
+                violation_msg = (
+                    f"Annotation {annotation_property} value '{annotation_value}' "
+                    f"has {annotation_length} characters, requires at most {max_length}"
+                )
+                violations.append((subject_uri, violation_msg))
+
+    return violations
+
+
+def check_annotation_regular_expression(
+    client: SparqlClient,
+    annotation_regex_expressions: List[Tuple[str, str]],
+) -> List[Tuple[str, str]]:
+    """Return annotation value violations for values that do not match the configured regex."""
+    if not annotation_regex_expressions:
+        return []
+
+    violations: List[Tuple[str, str]] = []
+
+    for annotation_property, regex_pattern in annotation_regex_expressions:
+        try:
+            pattern = re.compile(regex_pattern)
+        except re.error as err:
+            raise ValueError(
+                f"Invalid annotation regular expression regex: {regex_pattern} ({err})"
+            )
+
+        normalized_prop = normalize_iri(annotation_property)
+        query = f"""
+            SELECT ?subject ?value WHERE {{
+                ?subject {normalized_prop} ?value .
+            }}
+        """
+
+        for row in client.query(query):
+            subject_uri = str(row[0])
+            annotation_value = str(row[1])
+
+            if not pattern.fullmatch(annotation_value):
+                violation_msg = (
+                    f"Annotation {annotation_property} value '{annotation_value}' "
+                    f"does not match regex '{regex_pattern}'"
+                )
+                violations.append((subject_uri, violation_msg))
+
+    return violations
+
+
+def check_instance_of_min_annotation_coverage(
+    client: SparqlClient,
+    language_tags: List[str],
+    instance_coverage_requirements: List[Tuple[str, List[Tuple[str, int]]]],
+) -> List[Tuple[str, str]]:
+    """Return instance coverage violations for class-scoped mandatory annotations."""
+    if not instance_coverage_requirements:
+        return []
+
+    violations: List[Tuple[str, str]] = []
+
+    for class_uri, required_annotations in instance_coverage_requirements:
+        instance_query = f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            SELECT ?instance WHERE {{
+                ?instance rdf:type <{class_uri}> .
+                FILTER(!isBlank(?instance))
+            }}
+        """
+
+        for row in client.query(instance_query):
+            instance_uri = str(row[0])
+
+            for annotation_prop, required_cardinality in required_annotations:
+                normalized_prop = normalize_iri(annotation_prop)
+
+                if language_tags:
+                    for required_lang in language_tags:
+                        lang_query = f"""
+                            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                            SELECT (COUNT(?value) as ?count) WHERE {{
+                                <{instance_uri}> {normalized_prop} ?value .
+                                FILTER(lang(?value) = "{required_lang}")
+                            }}
+                        """
+
+                        count_result = list(client.query(lang_query))
+                        count = int(count_result[0][0]) if count_result else 0
+
+                        if count != required_cardinality:
+                            violation_msg = (
+                                f"Instance of {class_uri} is missing required annotation "
+                                f"{annotation_prop} for language {required_lang}: "
+                                f"has {count} values, requires exactly {required_cardinality}"
+                            )
+                            violations.append((instance_uri, violation_msg))
+                else:
+                    check_query = f"""
+                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                        SELECT (COUNT(?value) as ?count) WHERE {{
+                            <{instance_uri}> {normalized_prop} ?value .
+                        }}
+                    """
+
+                    count_result = list(client.query(check_query))
+                    count = int(count_result[0][0]) if count_result else 0
+
+                    if count != required_cardinality:
+                        violation_msg = (
+                            f"Instance of {class_uri} is missing required annotation "
+                            f"{annotation_prop}: has {count} values, requires exactly "
+                            f"{required_cardinality}"
+                        )
+                        violations.append((instance_uri, violation_msg))
+
+    return violations

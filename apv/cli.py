@@ -7,7 +7,7 @@ import sys
 from typing import Optional, List
 
 from apv.quality_criteria import retrieve_language_tags, retrieve_class_annotation_coverage, retrieve_class_uri_formation_rule, retrieve_relation_uri_formation_rule, retrieve_instance_uri_formation_rule, retrieve_relation_annotation_coverage, retrieve_instance_annotation_coverage, retrieve_min_annotation_length, retrieve_max_annotation_length, retrieve_annotation_regular_expression, retrieve_instance_of_annotation_coverage
-from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage
+from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage, check_min_annotation_length, check_max_annotation_length, check_annotation_regular_expression, check_instance_of_min_annotation_coverage
 from apv.sparql_client import SparqlClient
 
 
@@ -247,9 +247,43 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("No InstanceMinAnnotationCoverage violations found.")
 
     # - MinAnnotationLength
+    min_annotation_length_violations = check_min_annotation_length(client, min_annotation_lengths)
+    if min_annotation_length_violations:
+        print("Minimum annotation length violations found:")
+        for subject_uri, violation_msg in min_annotation_length_violations:
+            print("- ", subject_uri, ":", violation_msg)
+    else:
+        print("No MinAnnotationLength violations found.")
+
     # - MaxAnnotationLength
+    max_annotation_length_violations = check_max_annotation_length(client, max_annotation_lengths)
+    if max_annotation_length_violations:
+        print("Maximum annotation length violations found:")
+        for subject_uri, violation_msg in max_annotation_length_violations:
+            print("- ", subject_uri, ":", violation_msg)
+    else:
+        print("No MaxAnnotationLength violations found.")
+
     # - AnnotationRegularExpression
+    annotation_regex_violations = check_annotation_regular_expression(client, annotation_regex_expressions)
+    if annotation_regex_violations:
+        print("Annotation regular expression violations found:")
+        for subject_uri, violation_msg in annotation_regex_violations:
+            print("- ", subject_uri, ":", violation_msg)
+    else:
+        print("No AnnotationRegularExpression violations found.")
+
     # - InstanceOfMinAnnotationCoverage
+    instance_of_annotation_violations = check_instance_of_min_annotation_coverage(
+        client, language_tags, instance_coverage_requirements
+    )
+    if instance_of_annotation_violations:
+        print("Instance-of annotation coverage violations found:")
+        for instance_uri, violation_msg in instance_of_annotation_violations:
+            print("- ", instance_uri, ":", violation_msg)
+    else:
+        print("No InstanceOfMinAnnotationCoverage violations found.")
+
     return 0
 
 
