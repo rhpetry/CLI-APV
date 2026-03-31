@@ -46,7 +46,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--format",
-        default="ttl",
+        default="",
         help="RDF serialization format when loading a local file (default: ttl).",
     )
 
@@ -72,6 +72,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _load_client(args: argparse.Namespace) -> SparqlClient:
     if args.local_file:
+        if not args.format:
+            args.format = args.local_file.split(".")[-1]
+            args.format = "xml" if args.format == "owl" else args.format
         return SparqlClient.from_local_file(args.local_file, format=args.format)
 
     return SparqlClient.from_remote_endpoint(
