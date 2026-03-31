@@ -17,9 +17,12 @@ class SparqlClient:
     store: Optional[SPARQLStore] = None
 
     @classmethod
-    def from_local_file(cls, path: str, format: str = "ttl") -> "SparqlClient":
+    def from_local_file(cls, path: str, format: str = "") -> "SparqlClient":
         """Create a client backed by a local RDF file."""
         graph = Graph()
+        if not format:
+            format = path.split(".")[-1]
+            format = "xml" if format == "owl" else format
         graph.parse(path, format=format)
         return cls(local_graph=graph)
 
