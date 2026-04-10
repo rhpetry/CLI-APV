@@ -12,14 +12,15 @@
      xmlns:skos="http://www.w3.org/2004/02/skos/core#"
      xmlns:terms="http://purl.org/dc/terms/">
     <Ontology rdf:about="http://www.inf.ufrgs.br/ontologies/APV">
-        <rdfs:label xml:lang="en">Annotation Property Verificator</rdfs:label>
-        <terms:title xml:lang="en">Annotation Property Verificator</terms:title>
-        <terms:language xml:lang="en">en</terms:language>
-        <terms:creator xml:lang="en">Rafael Humann Petry</terms:creator>
         <terms:contributor xml:lang="en">Nicolau O. Santos, Haroldo R. S. Silva, Mara Abel</terms:contributor>
-        <rdfs:seeAlso xml:lang="en">Link for the paper once published</rdfs:seeAlso>
+        <terms:creator xml:lang="en">Rafael Humann Petry</terms:creator>
         <terms:description xml:lang="en">The Annotation Property Verificator (APV) methodology was developed at the Federal Uninversity of Rio Grande do Sul (UFRGS) as part of a methodology for safeguarding consistency in annotation properties. The methology is comprised of an OWL file, containing the types of user-configurable constraints, and a software application that checks the ontology&apos;s conformance to those constraints.
 The APV properties are designed to be simultaneously human-readable and machine-processable, allowing quality expectations to be explicitly stated and automatically verified by a validation engine. By encoding annotation-related constraints within the ontology itself, it promotes transparency, consistency, and tool-independent interpretation.</terms:description>
+        <terms:language xml:lang="en">en</terms:language>
+        <terms:title xml:lang="en">Annotation Property Verificator</terms:title>
+        <rdfs:label xml:lang="en">Annotation Property Verificator</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Link for the paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
     </Ontology>
     
 
@@ -308,6 +309,47 @@ The APV properties are designed to be simultaneously human-readable and machine-
 
 Protégé note: If using APV in an ontology on protégé for the first time, remember to add its prefix under &apos;Active ontology &gt; Ontology Prefixes&apos;</rdfs:comment>
         <rdfs:label xml:lang="en">Annotation property verificator annotation</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#AnnotationRegularExpression -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#AnnotationRegularExpression">
+        <terms:description xml:lang="en">The apv:AnnotationRegularExpression annotation enforces a syntactic convention for annotation values using regular expressions. This property is applied to an owl:AnnotationProperty to specify that all values of that annotation property must match the specified regular expression pattern. This ensures that annotations conform to defined formatting conventions and structural requirements.</terms:description>
+        <rdfs:label xml:lang="en">Annotation regular expression</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">rdfs:label (owl:AnnotationProperty) --apv:AnnotationRegularExpression--&gt; &quot;[a-zA-ZÀ-ú.;,]*&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#ClassMinAnnotationCoverage -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#ClassMinAnnotationCoverage">
+        <terms:description xml:lang="en">The apv:ClassMinAnnotationCoverage annotation specifies mandatory annotation properties and cardinality requirements for classes in the ontology. The value consists of a sequence of annotation property URIs and optional cardinality constraints (e.g., &quot;2^skos:example&quot; means at least 2 instances of skos:example). This ensures that classes meet minimum documentation and annotation standards. The cardinality can be specified as a superscript notation where a number precedes a caret (^) and the annotation property IRI.</terms:description>
+        <rdfs:label xml:lang="en">Class minimum annotation coverage</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:ClassMinAnnotationCoverage--&gt; &quot;rdfs:label skos:prefLabel skos:definition 2^skos:example&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#ClassURIFormationRule -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#ClassURIFormationRule">
+        <terms:description xml:lang="en">The apv:ClassURIFormationRule annotation specifies a constraint on the formation of URIs for classes asserted in the ontology. This rule ensures that all class URIs follow an explicitly stated formation rule in the form of a regular expression. The main purpose is to serve as a guideline to ensure that semantic content is not directly encoded into entity identifiers, thus maintaining the distinction between identity and linguistic representation and preventing any potential user behavior or assumptions.</terms:description>
+        <rdfs:label xml:lang="en">Class URI formation rule</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:ClassURIFormationRule--&gt; &quot;MyOntoClass_[0-9]{5}&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
     </AnnotationProperty>
     
 
@@ -318,9 +360,101 @@ Protégé note: If using APV in an ontology on protégé for the first time, rem
         <terms:description xml:lang="en">The apv:GlobalMinLanguageCoverage annotation indicates that all annotation properties expressed as RDF plain literals in the ontology must be accompanied by annotations of the same property type but with different language tags. Language tags are used to identify the natural language that is intended for human communication, and the syntax and vocabulary of language tags are maintained by the Internet Assigned Numbers Authority in the language tag registry.</terms:description>
         <rdfs:label xml:lang="en">Global minimum language coverage</rdfs:label>
         <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
         <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:GlobalMinLanguageCoverage--&gt; &quot;en-US es pt-BR&quot;</skos:example>
         <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
         <rdfs:range rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#languageCoverage"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#InstanceMinAnnotationCoverage -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#InstanceMinAnnotationCoverage">
+        <terms:description xml:lang="en">The apv:InstanceMinAnnotationCoverage annotation specifies mandatory annotation properties and cardinality requirements for instances in the ontology. The value consists of a sequence of annotation property URIs and optional cardinality constraints (e.g., &quot;2^skos:example&quot; means at least 2 instances of skos:example). This ensures that instances meet minimum documentation and annotation standards. The cardinality can be specified as a superscript notation where a number precedes a caret (^) and the annotation property IRI.</terms:description>
+        <rdfs:label xml:lang="en">Instance minimum annotation coverage</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:InstanceMinAnnotationCoverage--&gt; &quot;rdfs:label 2ˆskos:example&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#InstanceOfMinAnnotationCoverage -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#InstanceOfMinAnnotationCoverage">
+        <terms:description xml:lang="en">The apv:InstanceOfMinAnnotationCoverage annotation specifies mandatory annotation properties and cardinality requirements for instances of a specific class. This property is applied to an owl:Class to enforce that all instances of that class must have specific annotations with optional cardinality constraints (e.g., &quot;2^skos:example&quot; means at least 2 instances of skos:example). This provides class-scoped annotation constraints that complement ontology-wide coverage requirements.</terms:description>
+        <rdfs:label xml:lang="en">Instance of minimum annotation coverage</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyClass (owl:Class) --apv:InstanceOfMinAnnotationCoverage--&gt; &quot;myAnnotations:llmFriendlyDescription&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#InstanceURIFormationRule -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#InstanceURIFormationRule">
+        <terms:description xml:lang="en">The apv:InstanceURIFormationRule annotation specifies a constraint on the formation of URIs for instances asserted in the ontology. This rule ensures that all instance URIs follow an explicitly stated formation rule in the form of a regular expression. The main purpose is to serve as a guideline to ensure that semantic content is not directly encoded into entity identifiers, thus maintaining the distinction between identity and linguistic representation and preventing any potential user behavior or assumptions.</terms:description>
+        <rdfs:label xml:lang="en">Instance URI formation rule</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:InstanceURIFormationRule--&gt; &quot;MyOntoInstance_[0-9]{5}&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#MaxAnnotationLength -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#MaxAnnotationLength">
+        <terms:description xml:lang="en">The apv:MaxAnnotationLength annotation enforces a maximum character length for annotation values. This property is applied to an owl:AnnotationProperty to specify that all values of that annotation property must not exceed the specified number of characters. This ensures that annotations remain concise and do not exceed reasonable documentation limits.</terms:description>
+        <rdfs:label xml:lang="en">Maximum annotation length</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">rdfs:label (owl:AnnotationProperty) --apv:MaxAnnotationLength--&gt; 400</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#MinAnnotationLength -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#MinAnnotationLength">
+        <terms:description xml:lang="en">The apv:MinAnnotationLength annotation enforces a minimum character length for annotation values. This property is applied to an owl:AnnotationProperty to specify that all values of that annotation property must contain at least the specified number of characters. This ensures that annotations meet minimum verbosity and informativeness standards.</terms:description>
+        <rdfs:label xml:lang="en">Minimum annotation length</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">rdfs:label (owl:AnnotationProperty) --apv:MinAnnotationLength--&gt; 20</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#RelationMinAnnotationCoverage -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#RelationMinAnnotationCoverage">
+        <terms:description xml:lang="en">The apv:RelationMinAnnotationCoverage annotation specifies mandatory annotation properties and cardinality requirements for relations (object properties) in the ontology. The value consists of a sequence of annotation property URIs and optional cardinality constraints (e.g., &quot;2^skos:example&quot; means at least 2 instances of skos:example). This ensures that relations meet minimum documentation and annotation standards. The cardinality can be specified as a superscript notation where a number precedes a caret (^) and the annotation property IRI.</terms:description>
+        <rdfs:label xml:lang="en">Relation minimum annotation coverage</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:RelationMinAnnotationCoverage--&gt; &quot;rdfs:label skos:definition&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
+    </AnnotationProperty>
+    
+
+
+    <!-- http://www.inf.ufrgs.br/ontologies/APV#RelationURIFormationRule -->
+
+    <AnnotationProperty rdf:about="http://www.inf.ufrgs.br/ontologies/APV#RelationURIFormationRule">
+        <terms:description xml:lang="en">The apv:RelationURIFormationRule annotation specifies a constraint on the formation of URIs for relations (object properties) asserted in the ontology. This rule ensures that all relation URIs follow an explicitly stated formation rule in the form of a regular expression. The main purpose is to serve as a guideline to ensure that semantic content is not directly encoded into entity identifiers, thus maintaining the distinction between identity and linguistic representation and preventing any potential user behavior or assumptions.</terms:description>
+        <rdfs:label xml:lang="en">Relation URI formation rule</rdfs:label>
+        <rdfs:seeAlso xml:lang="en">Paper once published</rdfs:seeAlso>
+        <rdfs:seeAlso xml:lang="en">apv-web url once published</rdfs:seeAlso>
+        <skos:example xml:lang="en">MyOntology (owl:Ontology) --apv:RelationURIFormationRule--&gt; &quot;MyOntoRel_[0-9]{5}&quot;</skos:example>
+        <rdfs:subPropertyOf rdf:resource="http://www.inf.ufrgs.br/ontologies/APV#AnnotationPropertyVerificatorAnnotation"/>
     </AnnotationProperty>
     
 
