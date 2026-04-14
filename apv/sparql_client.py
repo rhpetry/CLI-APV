@@ -32,9 +32,13 @@ class SparqlClient:
         endpoint: str,
         user: Optional[str] = None,
         password: Optional[str] = None,
+        auth_header: Optional[str] = None,
     ) -> "SparqlClient":
         """Create a client that queries a remote SPARQL endpoint."""
-        store = SPARQLStore(endpoint)
+        store_kwargs = {"method": "POST_FORM", "returnFormat": "json"}
+        if auth_header:
+            store_kwargs["headers"] = {"Authorization": auth_header}
+        store = SPARQLStore(endpoint, **store_kwargs)
         if user or password:
             store.setCredentials(user or "", password or "")
         return cls(store=store)
