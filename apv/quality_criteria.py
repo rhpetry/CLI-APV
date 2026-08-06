@@ -1,299 +1,282 @@
-"""Quality criteria retrieval functions for OWL ontologies."""
+"""Retrieve and validate APV constraints from OWL ontologies."""
 
-from typing import List, Optional, Tuple
+from __future__ import annotations
+
 import re
+from collections.abc import Iterable
 
-#language_tags docs at: https://github.com/OnroerendErfgoed/language-tags/blob/develop/docs/source/introduction.rst
 import language_tags as language_tags_lib
-
-from rdflib import Namespace
 
 from apv.sparql_client import SparqlClient
 
 
-OWL = Namespace("http://www.w3.org/2002/07/owl#")
-APV = Namespace("http://inf.ufrgs.br/ontologies/apv#")
-RDFS = Namespace("http://www.w3.org/2000/01/rdf-schema#")
-SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
+CANONICAL_APV_NAMESPACE = "http://www.inf.ufrgs.br/ontologies/APV#"
+LEGACY_APV_NAMESPACE = "http://inf.ufrgs.br/ontologies/apv#"
+
+PREFIXES = {
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "apv": CANONICAL_APV_NAMESPACE,
+}
+
+_UNSAFE_IRI_CHARACTERS = re.compile(r'[\x00-\x20<>"{}|^`]')
 
 
-def retrieve_language_tags(client: SparqlClient) -> List[str]:
-    """Retrieve the list of required language tags from the ontology's GlobalMinLanguageCoverage."""
-    query = """
+def resolve_configured_iri(
+    value: str, prefixes: dict[str, str] | None = None
+) -> str:
+    """Expand a supported prefixed name or validate an absolute IRI."""
+    value = value.strip()
+    if not value:
+        raise ValueError("Annotation property IRI must not be empty")
+
+    available_prefixes = PREFIXES | (prefixes or {})
+    prefix, separator, local_name = value.partition(":")
+    if separator and prefix in available_prefixes:
+        if not local_name:
+            raise ValueError(f"Invalid prefixed IRI: '{value}'")
+        value = f"{available_prefixes[prefix]}{local_name}"
+    elif separator and "://" not in value:
+        raise ValueError(
+            f"Unsupported prefixed IRI '{value}'. Use a full IRI or one of: "
+            f"{', '.join(available_prefixes)}."
+        )
+    elif not re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", value):
+        raise ValueError(
+            f"Unsupported prefixed IRI '{value}'. Use a full IRI or one of: "
+            f"{', '.join(available_prefixes)}."
+        )
+
+    if _UNSAFE_IRI_CHARACTERS.search(value):
+        raise ValueError(f"Invalid IRI in APV constraint: '{value}'")
+    return value
+
+
+def _first_value(client: SparqlClient, predicates: Iterable[str]) -> str | None:
+    predicate_values = " ".join(
+        f"(<{predicate}> {priority})"
+        for priority, predicate in enumerate(predicates)
+    )
+    query = f"""
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?gmlc WHERE {
-            ?o a owl:Ontology ;
-               apv:GlobalMinLanguageCoverage ?gmlc .
-        }
+        SELECT ?value WHERE {{
+            ?ontology a owl:Ontology ;
+                      ?predicate ?value .
+            VALUES (?predicate ?priority) {{ {predicate_values} }}
+        }}
+        ORDER BY ?priority
+        LIMIT 1
     """
     results = list(client.query(query))
-    gmlc_value = str(results[0][0]).strip() if results else ""
-    
-    unvalidated_language_tags = gmlc_value.split()
-    for tag in unvalidated_language_tags:
+    return str(results[0][0]).strip() if results else None
+
+
+def _ontology_predicates(local_name: str, *legacy_names: str) -> list[str]:
+    predicates = [f"{CANONICAL_APV_NAMESPACE}{local_name}"]
+    predicates.extend(f"{LEGACY_APV_NAMESPACE}{name}" for name in (legacy_names or (local_name,)))
+    return predicates
+
+
+def retrieve_language_tags(client: SparqlClient) -> list[str]:
+    """Retrieve the required IANA language tags."""
+    raw = _first_value(
+        client,
+        _ontology_predicates(
+            "GlobalMinimumLanguageCoverage", "GlobalMinLanguageCoverage"
+        ),
+    ) or ""
+    tags = raw.split()
+    for tag in tags:
         if not language_tags_lib.tags.check(tag):
-            raise ValueError(f"Invalid language tag in GlobalMinLanguageCoverage: '{tag}'")
-    validated_language_tags = unvalidated_language_tags
-    return validated_language_tags
+            raise ValueError(
+                "Invalid language tag in GlobalMinimumLanguageCoverage: "
+                f"'{tag}'"
+            )
+    return tags
 
 
-def retrieve_class_uri_formation_rule(client: SparqlClient) -> Optional[str]:
-    """Retrieve the class URI formation rule from the ontology's ClassURIFormationRule."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
+def _retrieve_regex_rule(client: SparqlClient, local_name: str) -> str | None:
+    value = _first_value(client, _ontology_predicates(local_name))
+    if value is None or not value:
+        return None
+    try:
+        re.compile(value)
+    except re.error as error:
+        raise ValueError(
+            f"Invalid regex pattern for {local_name}: '{value}' - {error}"
+        ) from error
+    return value
 
-        SELECT ?cfre WHERE {
-            ?o a owl:Ontology ;
-               apv:ClassURIFormationRule ?cfre .
-        }
-    """
-    results = list(client.query(query))
-    if results:
-        cfre_value = str(results[0][0]).strip()
-        # Validate the format as a regular expression pattern
+
+def retrieve_class_uri_formation_rule(client: SparqlClient) -> str | None:
+    return _retrieve_regex_rule(client, "ClassURIFormationRule")
+
+
+def retrieve_relation_uri_formation_rule(client: SparqlClient) -> str | None:
+    return _retrieve_regex_rule(client, "RelationURIFormationRule")
+
+
+def retrieve_instance_uri_formation_rule(client: SparqlClient) -> str | None:
+    return _retrieve_regex_rule(client, "InstanceURIFormationRule")
+
+
+def parse_annotation_coverage(
+    raw: str, label: str, prefixes: dict[str, str] | None = None
+) -> list[tuple[str, int]]:
+    """Parse whitespace-separated ``[cardinality^]property`` tokens."""
+    requirements: list[tuple[str, int]] = []
+    for token in raw.split():
+        cardinality_text, separator, property_name = token.partition("^")
+        if separator:
+            if not cardinality_text.isdigit() or not property_name:
+                raise ValueError(f"Invalid format for {label}: '{token}'")
+            cardinality = int(cardinality_text)
+            if cardinality <= 0:
+                raise ValueError(f"Cardinality must be positive for {label}: '{token}'")
+        else:
+            property_name = cardinality_text
+            cardinality = 1
         try:
-            re.compile(cfre_value)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern for ClassURIFormationRule: '{cfre_value}' - {e}")
-        return cfre_value
-    return None
+            property_iri = resolve_configured_iri(property_name, prefixes)
+        except ValueError as error:
+            raise ValueError(f"Invalid format for {label}: '{token}' ({error})") from error
+        requirements.append((property_iri, cardinality))
+    return requirements
 
 
-def retrieve_relation_uri_formation_rule(client: SparqlClient) -> Optional[str]:
-    """Retrieve the relation URI formation rule from the ontology's RelationURIFormationRule."""
-    query = """
+def _retrieve_coverage(client: SparqlClient, local_name: str) -> list[tuple[str, int]]:
+    raw = _first_value(client, _ontology_predicates(local_name)) or ""
+    return parse_annotation_coverage(raw, local_name, _client_prefixes(client))
+
+
+def _client_prefixes(client: SparqlClient) -> dict[str, str]:
+    if client.local_graph is None:
+        return {}
+    return {
+        prefix: str(namespace)
+        for prefix, namespace in client.local_graph.namespaces()
+        if prefix
+    }
+
+
+def retrieve_class_annotation_coverage(client: SparqlClient) -> list[tuple[str, int]]:
+    return _retrieve_coverage(client, "ClassMinAnnotationCoverage")
+
+
+def retrieve_relation_annotation_coverage(client: SparqlClient) -> list[tuple[str, int]]:
+    return _retrieve_coverage(client, "RelationMinAnnotationCoverage")
+
+
+def retrieve_instance_annotation_coverage(client: SparqlClient) -> list[tuple[str, int]]:
+    return _retrieve_coverage(client, "InstanceMinAnnotationCoverage")
+
+
+def _property_constraint_rows(
+    client: SparqlClient, local_name: str
+) -> list[tuple[str, str]]:
+    predicate_order = _ontology_predicates(local_name)
+    predicates = " ".join(f"<{predicate}>" for predicate in predicate_order)
+    query = f"""
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?rfre WHERE {
-            ?o a owl:Ontology ;
-               apv:RelationURIFormationRule ?rfre .
-        }
+        SELECT ?property ?predicate ?value WHERE {{
+            ?property a owl:AnnotationProperty ;
+                      ?predicate ?value .
+            VALUES ?predicate {{ {predicates} }}
+        }}
     """
-    results = list(client.query(query))
-    if results:
-        rfre_value = str(results[0][0]).strip()
-        # Validate the format as a regular expression pattern
+    priority = {predicate: index for index, predicate in enumerate(predicate_order)}
+    selected: dict[str, tuple[int, str]] = {}
+    for row in client.query(query):
+        property_iri = str(row[0]).strip()
+        predicate = str(row[1]).strip()
+        value = str(row[2]).strip()
+        candidate = (priority[predicate], value)
+        if property_iri not in selected or candidate[0] < selected[property_iri][0]:
+            selected[property_iri] = candidate
+    return [(property_iri, value) for property_iri, (_, value) in selected.items()]
+
+
+def _retrieve_annotation_lengths(
+    client: SparqlClient, local_name: str
+) -> list[tuple[str, int]]:
+    requirements: list[tuple[str, int]] = []
+    for property_iri, raw_length in _property_constraint_rows(client, local_name):
+        if not raw_length:
+            continue
         try:
-            re.compile(rfre_value)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern for RelationURIFormationRule: '{rfre_value}' - {e}")
-        return rfre_value
-    return None
+            length = int(raw_length)
+        except ValueError as error:
+            raise ValueError(
+                f"Invalid length for {local_name} on {property_iri}: '{raw_length}'"
+            ) from error
+        if length <= 0:
+            raise ValueError(
+                f"Length must be positive for {local_name} on {property_iri}: "
+                f"'{raw_length}'"
+            )
+        requirements.append((resolve_configured_iri(property_iri), length))
+    return requirements
 
 
-def retrieve_instance_uri_formation_rule(client: SparqlClient) -> Optional[str]:
-    """Retrieve the instance URI formation rule from the ontology's InstanceURIFormationRule."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
+def retrieve_min_annotation_length(client: SparqlClient) -> list[tuple[str, int]]:
+    return _retrieve_annotation_lengths(client, "MinAnnotationLength")
 
-        SELECT ?ifre WHERE {
-            ?o a owl:Ontology ;
-               apv:InstanceURIFormationRule ?ifre .
-        }
-    """
-    results = list(client.query(query))
-    if results:
-        ifre_value = str(results[0][0]).strip()
-        # Validate the format as a regular expression pattern
+
+def retrieve_max_annotation_length(client: SparqlClient) -> list[tuple[str, int]]:
+    return _retrieve_annotation_lengths(client, "MaxAnnotationLength")
+
+
+def retrieve_annotation_regular_expression(
+    client: SparqlClient,
+) -> list[tuple[str, str]]:
+    requirements: list[tuple[str, str]] = []
+    for property_iri, pattern in _property_constraint_rows(
+        client, "AnnotationRegularExpression"
+    ):
+        if not pattern:
+            continue
         try:
-            re.compile(ifre_value)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern for InstanceURIFormationRule: '{ifre_value}' - {e}")
-        return ifre_value
-    return None
+            re.compile(pattern)
+        except re.error as error:
+            raise ValueError(
+                "Invalid regex pattern for AnnotationRegularExpression on "
+                f"{property_iri}: '{pattern}' - {error}"
+            ) from error
+        requirements.append((resolve_configured_iri(property_iri), pattern))
+    return requirements
 
 
-def retrieve_class_annotation_coverage(client: SparqlClient) -> Optional[str]:
-    """Retrieve the class annotation coverage requirement from the ontology's ClassMinAnnotationCoverage."""
-    query = """
+def retrieve_instance_of_annotation_coverage(
+    client: SparqlClient,
+) -> list[tuple[str, list[tuple[str, int]]]]:
+    predicate_order = _ontology_predicates("InstanceOfMinAnnotationCoverage")
+    predicates = " ".join(f"<{predicate}>" for predicate in predicate_order)
+    query = f"""
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?cmac WHERE {
-            ?o a owl:Ontology ;
-               apv:ClassMinAnnotationCoverage ?cmac .
-        }
-    """
-    results = list(client.query(query))
-    class_annotation_cardinalities = []
-    if results:
-        cmac_values = str(results[0][0]).strip()
-        for cmac_value in cmac_values.split(): 
-            # Validate the format with regex: sequence of properties or cardinalities^properties
-            if re.fullmatch(r'^([\w:./-]+)$', cmac_value):
-                cardinality = 1
-                annotation_iri = cmac_value
-                class_annotation_cardinalities.append((annotation_iri, cardinality))
-            elif re.fullmatch(r'^(\d+\^[\w:./-]+)$', cmac_value):
-                cardinality, annotation_iri = cmac_value.split('^')
-                cardinality = int(cardinality)
-                class_annotation_cardinalities.append((annotation_iri, cardinality))
-            else:
-                raise ValueError(f"Invalid format for ClassMinAnnotationCoverage: '{cmac_value}'")
-
-    return class_annotation_cardinalities
-
-
-def retrieve_relation_annotation_coverage(client: SparqlClient) -> List[Tuple[str, int]]:
-    """Retrieve the relation annotation coverage requirement from the ontology's RelationMinAnnotationCoverage."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?rmac WHERE {
-            ?o a owl:Ontology ;
-               apv:RelationMinAnnotationCoverage ?rmac .
-        }
-    """
-    results = list(client.query(query))
-    relation_annotation_cardinalities = []
-    if results:
-        rmac_values = str(results[0][0]).strip()
-        for rmac_value in rmac_values.split(): 
-            # Validate the format with regex: sequence of properties or cardinalities^properties
-            if re.fullmatch(r'^([\w:./-]+)$', rmac_value):
-                cardinality = 1
-                annotation_iri = rmac_value
-                relation_annotation_cardinalities.append((annotation_iri, cardinality))
-            elif re.fullmatch(r'^(\d+\^[\w:./-]+)$', rmac_value):
-                cardinality, annotation_iri = rmac_value.split('^')
-                cardinality = int(cardinality)
-                relation_annotation_cardinalities.append((annotation_iri, cardinality))
-            else:
-                raise ValueError(f"Invalid format for RelationMinAnnotationCoverage: '{rmac_value}'")
-
-    return relation_annotation_cardinalities
-
-
-def retrieve_instance_annotation_coverage(client: SparqlClient) -> List[Tuple[str, int]]:
-    """Retrieve the instance annotation coverage requirement from the ontology's InstanceMinAnnotationCoverage."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?imac WHERE {
-            ?o a owl:Ontology ;
-               apv:InstanceMinAnnotationCoverage ?imac .
-        }
-    """
-    results = list(client.query(query))
-    instance_annotation_cardinalities = []
-    if results:
-        imac_values = str(results[0][0]).strip()
-        for imac_value in imac_values.split(): 
-            # Validate the format with regex: sequence of properties or cardinalities^properties
-            if re.fullmatch(r'^([\w:./-]+)$', imac_value):
-                cardinality = 1
-                annotation_iri = imac_value
-                instance_annotation_cardinalities.append((annotation_iri, cardinality))
-            elif re.fullmatch(r'^(\d+\^[\w:./-]+)$', imac_value):
-                cardinality, annotation_iri = imac_value.split('^')
-                cardinality = int(cardinality)
-                instance_annotation_cardinalities.append((annotation_iri, cardinality))
-            else:
-                raise ValueError(f"Invalid format for InstanceMinAnnotationCoverage: '{imac_value}'")
-
-    return instance_annotation_cardinalities
-
-
-def retrieve_min_annotation_length(client: SparqlClient) -> List[Tuple[str, int]]:
-    """Retrieve the minimum annotation length requirements from annotation properties."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?ap ?mal WHERE {
-            ?ap a owl:AnnotationProperty ;
-                apv:MinAnnotationLength ?mal .
-        }
-    """
-    results = list(client.query(query))
-    min_annotation_lengths = []
-    for result in results:
-        annotation_property = str(result[0]).strip()
-        min_length = int(str(result[1]).strip())
-        min_annotation_lengths.append((annotation_property, min_length))
-    return min_annotation_lengths
-
-
-def retrieve_max_annotation_length(client: SparqlClient) -> List[Tuple[str, int]]:
-    """Retrieve the maximum annotation length requirements from annotation properties."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?ap ?mal WHERE {
-            ?ap a owl:AnnotationProperty ;
-                apv:MaxAnnotationLength ?mal .
-        }
-    """
-    results = list(client.query(query))
-    max_annotation_lengths = []
-    for result in results:
-        annotation_property = str(result[0]).strip()
-        max_length = int(str(result[1]).strip())
-        max_annotation_lengths.append((annotation_property, max_length))
-    return max_annotation_lengths
-
-
-def retrieve_annotation_regular_expression(client: SparqlClient) -> List[Tuple[str, str]]:
-    """Retrieve the annotation regular expression constraints from annotation properties."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?ap ?are WHERE {
-            ?ap a owl:AnnotationProperty ;
-                apv:AnnotationRegularExpression ?are .
-        }
-    """
-    results = list(client.query(query))
-    annotation_regex_expressions = []
-    for result in results:
-        annotation_property = str(result[0]).strip()
-        regex_pattern = str(result[1]).strip()
-        # Validate the regex pattern
-        try:
-            re.compile(regex_pattern)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern for AnnotationRegularExpression on {annotation_property}: '{regex_pattern}' - {e}")
-        annotation_regex_expressions.append((annotation_property, regex_pattern))
-    return annotation_regex_expressions
-
-
-def retrieve_instance_of_annotation_coverage(client: SparqlClient) -> List[Tuple[str, List[Tuple[str, int]]]]:
-    """Retrieve the instance annotation coverage requirements from classes' InstanceOfMinAnnotationCoverage."""
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX apv: <http://inf.ufrgs.br/ontologies/apv#>
-
-        SELECT ?class ?ioac WHERE {
+        SELECT ?class ?predicate ?value WHERE {{
             ?class a owl:Class ;
-                   apv:InstanceOfMinAnnotationCoverage ?ioac .
-        }
+                   ?predicate ?value .
+            VALUES ?predicate {{ {predicates} }}
+        }}
     """
-    results = list(client.query(query))
-    instance_coverage_requirements = []
-    for result in results:
-        class_uri = str(result[0]).strip()
-        ioac_values = str(result[1]).strip()
-        class_annotations = []
-        for ioac_value in ioac_values.split():
-            # Validate the format with regex: sequence of properties or cardinalities^properties
-            if re.fullmatch(r'^([\w:./-]+)$', ioac_value):
-                cardinality = 1
-                annotation_iri = ioac_value
-                class_annotations.append((annotation_iri, cardinality))
-            elif re.fullmatch(r'^(\d+\^[\w:./-]+)$', ioac_value):
-                cardinality, annotation_iri = ioac_value.split('^')
-                cardinality = int(cardinality)
-                class_annotations.append((annotation_iri, cardinality))
-            else:
-                raise ValueError(f"Invalid format for InstanceOfMinAnnotationCoverage on {class_uri}: '{ioac_value}'")
-        instance_coverage_requirements.append((class_uri, class_annotations))
-    return instance_coverage_requirements
+    priority = {predicate: index for index, predicate in enumerate(predicate_order)}
+    selected: dict[str, tuple[int, str]] = {}
+    for row in client.query(query):
+        class_iri = resolve_configured_iri(str(row[0]).strip())
+        predicate = str(row[1]).strip()
+        value = str(row[2]).strip()
+        candidate = (priority[predicate], value)
+        if class_iri not in selected or candidate[0] < selected[class_iri][0]:
+            selected[class_iri] = candidate
+
+    requirements = []
+    for class_iri, (_, raw_coverage) in selected.items():
+        coverage = parse_annotation_coverage(
+            raw_coverage,
+            f"InstanceOfMinAnnotationCoverage on {class_iri}",
+            _client_prefixes(client),
+        )
+        requirements.append((class_iri, coverage))
+    return requirements

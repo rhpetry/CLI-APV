@@ -1,33 +1,88 @@
 """Quality testing functions for OWL ontologies."""
 
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Tuple
 
-from rdflib import Namespace
-
+from apv.quality_criteria import resolve_configured_iri
 from apv.sparql_client import SparqlClient
 
 
-OWL = Namespace("http://www.w3.org/2002/07/owl#")
-APV = Namespace("http://inf.ufrgs.br/ontologies/apv#")
-RDFS = Namespace("http://www.w3.org/2000/01/rdf-schema#")
-SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
-
-
 def normalize_iri(iri: str) -> str:
-    """Normalize an IRI for SPARQL: wrap full URIs with <>, keep prefixes as-is."""
-    if not iri:
-        return iri
-    
-    # Full URI form (contains ://) - wrap with < >
-    if "://" in iri:
-        return f"<{iri}>"
-    
-    # Prefix form (e.g., rdfs:label) - return as-is for SPARQL PREFIX resolution
-    return iri
+    """Return a validated SPARQL IRI reference."""
+    return f"<{resolve_configured_iri(iri)}>"
 
 
-def check_class_uri_formation_rule(client: SparqlClient, class_uri_formation_rule: str) -> List[str]:
+def _resource_iri(iri: str) -> str:
+    """Validate an IRI read from RDF before interpolating it into SPARQL."""
+    return normalize_iri(iri)
+
+
+def _count_annotation_values(
+    client: SparqlClient,
+    subject_iri: str,
+    annotation_iri: str,
+    language_tag: str | None = None,
+) -> int:
+    language_filter = ""
+    if language_tag is not None:
+        language_filter = f'FILTER(LCASE(LANG(?value)) = "{language_tag.lower()}")'
+    query = f"""
+        SELECT (COUNT(?value) AS ?count) WHERE {{
+            {_resource_iri(subject_iri)} {normalize_iri(annotation_iri)} ?value .
+            {language_filter}
+        }}
+    """
+    results = list(client.query(query))
+    return int(results[0][0]) if results else 0
+
+
+def _named_resources(client: SparqlClient, query: str) -> list[str]:
+    return list(dict.fromkeys(str(row[0]) for row in client.query(query)))
+
+
+def _class_iris(client: SparqlClient) -> list[str]:
+    return _named_resources(
+        client,
+        """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?resource WHERE {
+            ?resource a owl:Class .
+            FILTER(!isBlank(?resource))
+        }
+        """,
+    )
+
+
+def _relation_iris(client: SparqlClient) -> list[str]:
+    return _named_resources(
+        client,
+        """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?resource WHERE {
+            VALUES ?type { owl:ObjectProperty owl:DatatypeProperty owl:AnnotationProperty }
+            ?resource a ?type .
+            FILTER(!isBlank(?resource))
+        }
+        """,
+    )
+
+
+def _instance_iris(client: SparqlClient) -> list[str]:
+    return _named_resources(
+        client,
+        """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?resource WHERE {
+            ?resource rdf:type ?class .
+            ?class a owl:Class .
+            FILTER(!isBlank(?resource))
+        }
+        """,
+    )
+
+
+def check_class_uri_formation_rule(client: SparqlClient, class_uri_formation_rule: str | None) -> List[str]:
     """Return class URI violations for owl:Class IRIs that do not match the pattern."""
     if not class_uri_formation_rule:
         return []
@@ -37,23 +92,15 @@ def check_class_uri_formation_rule(client: SparqlClient, class_uri_formation_rul
     except re.error as err:
         raise ValueError(f"Invalid class URI formation regex: {class_uri_formation_rule} ({err})")
 
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?class WHERE {
-            ?class a owl:Class .
-            filter(!isBlank(?class))
-        }
-    """
     violations: List[str] = []
-    for row in client.query(query):
-        class_uri = str(row[0])
+    for class_uri in _class_iris(client):
         if not pattern.fullmatch(class_uri):
             violations.append(class_uri)
 
     return violations
 
 
-def check_relation_uri_formation_rule(client: SparqlClient, relation_uri_formation_rule: str) -> List[str]:
+def check_relation_uri_formation_rule(client: SparqlClient, relation_uri_formation_rule: str | None) -> List[str]:
     """Return relation URI violations for owl:ObjectProperty/owl:DatatypeProperty IRIs that do not match the pattern."""
     if not relation_uri_formation_rule:
         return []
@@ -63,24 +110,15 @@ def check_relation_uri_formation_rule(client: SparqlClient, relation_uri_formati
     except re.error as err:
         raise ValueError(f"Invalid relation URI formation regex: {relation_uri_formation_rule} ({err})")
 
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?relation WHERE {
-            VALUES ?type { owl:ObjectProperty owl:DatatypeProperty owl:AnnotationProperty}
-            ?relation a ?type .
-            FILTER(!isBlank(?relation))
-        }
-    """
     violations: List[str] = []
-    for row in client.query(query):
-        relation_uri = str(row[0])
+    for relation_uri in _relation_iris(client):
         if not pattern.fullmatch(relation_uri):
             violations.append(relation_uri)
 
     return violations
 
 
-def check_instance_uri_formation_rule(client: SparqlClient, instance_uri_formation_rule: str) -> List[str]:
+def check_instance_uri_formation_rule(client: SparqlClient, instance_uri_formation_rule: str | None) -> List[str]:
     """Return instance URI violations for individual IRIs that do not match the pattern."""
     if not instance_uri_formation_rule:
         return []
@@ -90,21 +128,60 @@ def check_instance_uri_formation_rule(client: SparqlClient, instance_uri_formati
     except re.error as err:
         raise ValueError(f"Invalid instance URI formation regex: {instance_uri_formation_rule} ({err})")
 
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        SELECT ?instance WHERE {
-            ?class rdf:type owl:Class .
-            ?instance rdf:type ?class .
-            FILTER(!isBlank(?instance))
-        }
-    """
     violations: List[str] = []
-    for row in client.query(query):
-        instance_uri = str(row[0])
+    for instance_uri in _instance_iris(client):
         if not pattern.fullmatch(instance_uri):
             violations.append(instance_uri)
 
+    return violations
+
+
+def check_global_minimum_language_coverage(
+    client: SparqlClient,
+    language_tags: list[str],
+    class_requirements: list[tuple[str, int]],
+    relation_requirements: list[tuple[str, int]],
+    instance_requirements: list[tuple[str, int]],
+    instance_of_requirements: list[tuple[str, list[tuple[str, int]]]],
+) -> list[tuple[str, str]]:
+    """Check required languages only for properties governed by APV coverage rules."""
+    if not language_tags:
+        return []
+
+    targets: set[tuple[str, str]] = set()
+    for subject in _class_iris(client):
+        targets.update((subject, property_iri) for property_iri, _ in class_requirements)
+    for subject in _relation_iris(client):
+        targets.update((subject, property_iri) for property_iri, _ in relation_requirements)
+    for subject in _instance_iris(client):
+        targets.update((subject, property_iri) for property_iri, _ in instance_requirements)
+    for class_iri, requirements in instance_of_requirements:
+        instances = _named_resources(
+            client,
+            f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            SELECT DISTINCT ?resource WHERE {{
+                ?resource rdf:type {_resource_iri(class_iri)} .
+                FILTER(!isBlank(?resource))
+            }}
+            """,
+        )
+        for subject in instances:
+            targets.update((subject, property_iri) for property_iri, _ in requirements)
+
+    violations: list[tuple[str, str]] = []
+    for subject_iri, annotation_iri in sorted(targets):
+        for language_tag in language_tags:
+            if _count_annotation_values(
+                client, subject_iri, annotation_iri, language_tag
+            ) == 0:
+                violations.append(
+                    (
+                        subject_iri,
+                        f"Annotation {annotation_iri} is missing required language "
+                        f"{language_tag}",
+                    )
+                )
     return violations
 
 
@@ -115,51 +192,23 @@ def check_class_min_annotation_coverage(client: SparqlClient, language_tags: Lis
 
     violations: List[Tuple[str, str]] = []
 
-    # Get all classes
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?class WHERE {
-            ?class a owl:Class .
-            FILTER(!isBlank(?class))
-        }
-    """
-
-    for row in client.query(query):
-        class_uri = str(row[0])
+    for class_uri in _class_iris(client):
 
         # For each required annotation property, check exact cardinality
         for annotation_prop, required_cardinality in class_annotation_cardinalities:
-            # Normalize the annotation property IRI
-            normalized_prop = normalize_iri(annotation_prop)
-            
             if language_tags:
                 # Check cardinality per language
                 for required_lang in language_tags:
-                    lang_query = f"""
-                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                        SELECT (COUNT(?value) as ?count) WHERE {{
-                            <{class_uri}> {normalized_prop} ?value .
-                            FILTER(lang(?value) = "{required_lang}")
-                        }}
-                    """
-                    
-                    count_result = list(client.query(lang_query))
-                    count = int(count_result[0][0]) if count_result else 0
+                    count = _count_annotation_values(
+                        client, class_uri, annotation_prop, required_lang
+                    )
 
                     if count != required_cardinality:
                         violation_msg = f"Annotation {annotation_prop} with language {required_lang} has {count} values, requires exactly {required_cardinality}"
                         violations.append((class_uri, violation_msg))
             else:
                 # Check total cardinality without language filtering
-                check_query = f"""
-                    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                    SELECT (COUNT(?value) as ?count) WHERE {{
-                        <{class_uri}> {normalized_prop} ?value .
-                    }}
-                """
-                
-                count_result = list(client.query(check_query))
-                count = int(count_result[0][0]) if count_result else 0
+                count = _count_annotation_values(client, class_uri, annotation_prop)
 
                 if count != required_cardinality:
                     violation_msg = f"Annotation {annotation_prop} has {count} values, requires exactly {required_cardinality}"
@@ -175,48 +224,20 @@ def check_relation_min_annotation_coverage(client: SparqlClient, language_tags: 
 
     violations: List[Tuple[str, str]] = []
 
-    # Get all relation properties (ObjectProperty, DatatypeProperty, AnnotationProperty)
-    query = """
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?relation WHERE {
-            VALUES ?type { owl:ObjectProperty owl:DatatypeProperty owl:AnnotationProperty }
-            ?relation a ?type .
-            FILTER(!isBlank(?relation))
-        }
-    """
-
-    for row in client.query(query):
-        relation_uri = str(row[0])
+    for relation_uri in _relation_iris(client):
 
         for annotation_prop, required_cardinality in relation_annotation_cardinalities:
-            normalized_prop = normalize_iri(annotation_prop)
-
             if language_tags:
                 for required_lang in language_tags:
-                    lang_query = f"""
-                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                        SELECT (COUNT(?value) as ?count) WHERE {{
-                            <{relation_uri}> {normalized_prop} ?value .
-                            FILTER(lang(?value) = \"{required_lang}\")
-                        }}
-                    """
-
-                    count_result = list(client.query(lang_query))
-                    count = int(count_result[0][0]) if count_result else 0
+                    count = _count_annotation_values(
+                        client, relation_uri, annotation_prop, required_lang
+                    )
 
                     if count != required_cardinality:
                         violation_msg = f"Annotation {annotation_prop} with language {required_lang} has {count} values, requires exactly {required_cardinality}"
                         violations.append((relation_uri, violation_msg))
             else:
-                check_query = f"""
-                    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                    SELECT (COUNT(?value) as ?count) WHERE {{
-                        <{relation_uri}> {normalized_prop} ?value .
-                    }}
-                """
-
-                count_result = list(client.query(check_query))
-                count = int(count_result[0][0]) if count_result else 0
+                count = _count_annotation_values(client, relation_uri, annotation_prop)
 
                 if count != required_cardinality:
                     violation_msg = f"Annotation {annotation_prop} has {count} values, requires exactly {required_cardinality}"
@@ -232,49 +253,20 @@ def check_instance_min_annotation_coverage(client: SparqlClient, language_tags: 
 
     violations: List[Tuple[str, str]] = []
 
-    # Get all instances
-    query = """
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        SELECT ?instance WHERE {
-            ?instance rdf:type ?class .
-            ?class a owl:Class .
-            FILTER(!isBlank(?instance))
-        }
-    """
-
-    for row in client.query(query):
-        instance_uri = str(row[0])
+    for instance_uri in _instance_iris(client):
 
         for annotation_prop, required_cardinality in instance_annotation_cardinalities:
-            normalized_prop = normalize_iri(annotation_prop)
-
             if language_tags:
                 for required_lang in language_tags:
-                    lang_query = f"""
-                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                        SELECT (COUNT(?value) as ?count) WHERE {{
-                            <{instance_uri}> {normalized_prop} ?value .
-                            FILTER(lang(?value) = \"{required_lang}\")
-                        }}
-                    """
-
-                    count_result = list(client.query(lang_query))
-                    count = int(count_result[0][0]) if count_result else 0
+                    count = _count_annotation_values(
+                        client, instance_uri, annotation_prop, required_lang
+                    )
 
                     if count != required_cardinality:
                         violation_msg = f"Annotation {annotation_prop} with language {required_lang} has {count} values, requires exactly {required_cardinality}"
                         violations.append((instance_uri, violation_msg))
             else:
-                check_query = f"""
-                    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                    SELECT (COUNT(?value) as ?count) WHERE {{
-                        <{instance_uri}> {normalized_prop} ?value .
-                    }}
-                """
-
-                count_result = list(client.query(check_query))
-                count = int(count_result[0][0]) if count_result else 0
+                count = _count_annotation_values(client, instance_uri, annotation_prop)
 
                 if count != required_cardinality:
                     violation_msg = f"Annotation {annotation_prop} has {count} values, requires exactly {required_cardinality}"
@@ -403,7 +395,7 @@ def check_instance_of_min_annotation_coverage(
         instance_query = f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             SELECT ?instance WHERE {{
-                ?instance rdf:type <{class_uri}> .
+                ?instance rdf:type {_resource_iri(class_uri)} .
                 FILTER(!isBlank(?instance))
             }}
         """
@@ -412,20 +404,11 @@ def check_instance_of_min_annotation_coverage(
             instance_uri = str(row[0])
 
             for annotation_prop, required_cardinality in required_annotations:
-                normalized_prop = normalize_iri(annotation_prop)
-
                 if language_tags:
                     for required_lang in language_tags:
-                        lang_query = f"""
-                            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                            SELECT (COUNT(?value) as ?count) WHERE {{
-                                <{instance_uri}> {normalized_prop} ?value .
-                                FILTER(lang(?value) = "{required_lang}")
-                            }}
-                        """
-
-                        count_result = list(client.query(lang_query))
-                        count = int(count_result[0][0]) if count_result else 0
+                        count = _count_annotation_values(
+                            client, instance_uri, annotation_prop, required_lang
+                        )
 
                         if count != required_cardinality:
                             violation_msg = (
@@ -435,15 +418,9 @@ def check_instance_of_min_annotation_coverage(
                             )
                             violations.append((instance_uri, violation_msg))
                 else:
-                    check_query = f"""
-                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                        SELECT (COUNT(?value) as ?count) WHERE {{
-                            <{instance_uri}> {normalized_prop} ?value .
-                        }}
-                    """
-
-                    count_result = list(client.query(check_query))
-                    count = int(count_result[0][0]) if count_result else 0
+                    count = _count_annotation_values(
+                        client, instance_uri, annotation_prop
+                    )
 
                     if count != required_cardinality:
                         violation_msg = (

@@ -8,7 +8,7 @@ import sys
 from typing import Any, Optional, List
 
 from apv.quality_criteria import retrieve_language_tags, retrieve_class_annotation_coverage, retrieve_class_uri_formation_rule, retrieve_relation_uri_formation_rule, retrieve_instance_uri_formation_rule, retrieve_relation_annotation_coverage, retrieve_instance_annotation_coverage, retrieve_min_annotation_length, retrieve_max_annotation_length, retrieve_annotation_regular_expression, retrieve_instance_of_annotation_coverage
-from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage, check_min_annotation_length, check_max_annotation_length, check_annotation_regular_expression, check_instance_of_min_annotation_coverage
+from apv.quality_testing import check_class_uri_formation_rule, check_relation_uri_formation_rule, check_instance_uri_formation_rule, check_global_minimum_language_coverage, check_class_min_annotation_coverage, check_relation_min_annotation_coverage, check_instance_min_annotation_coverage, check_min_annotation_length, check_max_annotation_length, check_annotation_regular_expression, check_instance_of_min_annotation_coverage
 from apv.sparql_client import SparqlClient
 
 
@@ -114,11 +114,11 @@ def _print_text_constraints(
         print("No InstanceURIFormationRule statement found in ontology. Skipping instance URI formation rule checks.")
 
     if language_tags:
-        print("apv:GlobalMinLanguageCoverage requires the following language tags:")
+        print("apv:GlobalMinimumLanguageCoverage requires the following language tags:")
         for language_tag in language_tags:
             print("- ", language_tag)
     else:
-        print("No GlobalMinLanguageCoverage statement found in ontology. Skipping language coverage checks.")
+        print("No GlobalMinimumLanguageCoverage statement found in ontology. Skipping language coverage checks.")
 
     if class_annotation_cardinalities:
         print("apv:ClassMinAnnotationCoverage requires the following annotations:")
@@ -177,7 +177,7 @@ def _print_text_results(results: List[dict[str, Any]]) -> None:
         "ClassURIFormationRule": ("Class URI formation violations found:", "No ClassURIFormationRule violations found."),
         "RelationURIFormationRule": ("Relation URI formation violations found:", "No RelationURIFormationRule violations found."),
         "InstanceURIFormationRule": ("Instance URI formation violations found:", "No InstanceURIFormationRule violations found."),
-        "GlobalMinLanguageCoverage": ("Global language coverage violations found:", "No GlobalMinLanguageCoverage violations found."),
+        "GlobalMinimumLanguageCoverage": ("Global language coverage violations found:", "No GlobalMinimumLanguageCoverage violations found."),
         "ClassMinAnnotationCoverage": ("Class annotation coverage violations found:", "No ClassMinAnnotationCoverage violations found."),
         "RelationMinAnnotationCoverage": ("Relation annotation coverage violations found:", "No RelationMinAnnotationCoverage violations found."),
         "InstanceMinAnnotationCoverage": ("Instance annotation coverage violations found:", "No InstanceMinAnnotationCoverage violations found."),
@@ -234,9 +234,16 @@ def _build_results(
             "violations": check_instance_uri_formation_rule(client, instance_uri_formation_rule),
         },
         {
-            "check": "GlobalMinLanguageCoverage",
+            "check": "GlobalMinimumLanguageCoverage",
             "parameter": language_tags,
-            "violations": [],
+            "violations": check_global_minimum_language_coverage(
+                client,
+                language_tags,
+                class_annotation_cardinalities,
+                relation_annotation_cardinalities,
+                instance_annotation_cardinalities,
+                instance_coverage_requirements,
+            ),
         },
         {
             "check": "ClassMinAnnotationCoverage",
@@ -314,7 +321,7 @@ def _build_constraints(
     }
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def _run(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -383,7 +390,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         _print_text_results(results)
 
-    return 0
+    return 1 if any(result["violations"] for result in results) else 0
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """Run the CLI, returning 0 for success, 1 for violations, or 2 for errors."""
+    try:
+        return _run(argv)
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

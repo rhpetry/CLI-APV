@@ -45,25 +45,25 @@ Declared in `pyproject.toml`, locked in `uv.lock`.
 Recommended local run:
 
 ```bash
-uv run main.py --local data/o3po.ttl
+uv run main.py --local examples/apollo_sv.owl
 ```
 
 Example edited sample:
 
 ```bash
-uv run main.py --local data/o3po-edited.ttl
+uv run main.py --local examples/apollo_sv-edited.owl
 ```
 
 Human-readable output:
 
 ```bash
-uv run main.py --local data/o3po-edited.ttl --text
+uv run main.py --local examples/apollo_sv-edited.owl --text
 ```
 
 Structured JSON output:
 
 ```bash
-uv run main.py --local data/o3po-edited.ttl --json
+uv run main.py --local examples/apollo_sv-edited.owl --json
 ```
 
 Remote endpoint mode:
@@ -80,8 +80,8 @@ uv run main.py --remote <SPARQL-endpoint> --user <user> --password <password>
 - `apv/sparql_client.py`: abstraction over local `rdflib.Graph` and remote `SPARQLStore`
 - `apv/quality_criteria.py`: retrieves APV constraints from ontology annotations
 - `apv/quality_testing.py`: executes actual validation checks
-- `data/o3po.ttl`: base ontology sample
-- `data/o3po-edited.ttl`: ontology sample with APV constraints and intentional validation failures
+- `examples/apollo_sv.owl`: base ontology sample
+- `examples/apollo_sv-edited.owl`: ontology sample with APV constraints and intentional validation failures
 - `README.md`: project intent and advertised feature set
 
 ## Architecture
@@ -247,12 +247,12 @@ Some function return annotations do not match actual return values precisely.
 
 ## Sample Data Guidance
 
-`data/o3po.ttl`
+`examples/apollo_sv.owl`
 
 - clean ontology sample
 - useful as a baseline ontology input
 
-`data/o3po-edited.ttl`
+`examples/apollo_sv-edited.owl`
 
 - includes APV annotations
 - includes intentionally useful validation cases
@@ -275,7 +275,7 @@ Some function return annotations do not match actual return values precisely.
 ## Working Assumptions For Future Agents
 
 - prefer preserving the current architecture unless the task explicitly asks for refactoring
-- treat `data/o3po-edited.ttl` as the main manual verification fixture
+- treat `examples/apollo_sv-edited.owl` as the main manual verification fixture
 - if changing validation semantics, verify whether the intended rule is minimum cardinality or exact cardinality
 - keep local-file and remote-endpoint support working through the same `SparqlClient` interface
 - avoid assuming the README is fully synchronized with implementation
@@ -291,6 +291,6 @@ If you are new to the repo, read files in this order:
 4. `apv/sparql_client.py`
 5. `apv/quality_criteria.py`
 6. `apv/quality_testing.py`
-7. `data/o3po-edited.ttl`
+7. `examples/apollo_sv-edited.owl`
 
 This gives the fastest path to understanding the project’s intent, data model, and current implementation state.
